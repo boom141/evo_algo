@@ -1,4 +1,5 @@
 import pygame, sys, time, random, math, json
+from particle_system import particle_main
 from pygame.locals import*
 
 pygame.init()
@@ -6,8 +7,10 @@ pygame.init()
 SCREEN_DIMENSION = (500,500)
 
 SCREEN = pygame.display.set_mode(SCREEN_DIMENSION,0,32)
+ALPHA_SURFACE = pygame.Surface(SCREEN_DIMENSION)
 FPS = pygame.time.Clock()
 pygame.display.set_caption("Evolution Algorithm")
+
 
 
 class DNA:
@@ -124,8 +127,6 @@ class evolution:
                 for _ in range(multiplier):
                     self.matingpool.append(subject)
 
-
-            print(len(self.population))
             if self.matingpool:
                 self.selection()
             else:
@@ -163,10 +164,13 @@ class test_subject:
 
         """
 
-        self.subject = None
-        self.position = [250,485]
+        self.rocket_img = pygame.image.load('./rocket_ast1.png').convert()
+        self.rocket_rect = None
+        self.position = [250,450]
         self.velocity = [0,0]
         self.acceleration = [0,0]
+        self.angle = 0
+
         if dna != None:
             self.dna = dna
         else:
@@ -176,6 +180,7 @@ class test_subject:
         self.fitness = None
         self.alive = True
         self.target_reached = False
+        self.particles = []
 
     def check_status(self):
         """
@@ -183,11 +188,24 @@ class test_subject:
         
         """
 
-        if self.position[0] >= 500 or self.position[0] <= 0:
+        if self.position[0] >= 468 or self.position[0] <= 0:
             self.alive = False        
-        if self.position[1] >= 500 or self.position[1] <= 0:
+        if self.position[1] >= 460 or self.position[1] <= 0:
             self.alive = False 
     
+    def render_particles(self,length=10):
+        for _ in range(length):
+            self.particles.append(particle_main(position=[self.rocket_rect.midbottom[0] ,self.rocket_rect.midbottom[1] - 5],velocity=[random.uniform(-2,2) * 0.5,random.uniform(-3,3)],
+            speed=2,radius=5,gravity=True,color=random.choice(['red','orange','yellow'])))
+
+        for particle in self.particles:
+            particle.apply_force(force=[0,0.3])
+            particle.update()
+            particle.render(ALPHA_SURFACE)
+
+            if particle.is_finished():
+                self.particles.remove(particle)
+
     def calculate_fitness(self, target):
         """
         calculates the fitness of the test subjects
@@ -195,11 +213,13 @@ class test_subject:
         :param: rect object
         
         """
-        if self.subject != None:
-            if target.colliderect(self.subject):
+        if self.rocket_rect != None:
+            if target.colliderect(self.rocket_rect):
                 self.target_reached = True
 
-        distance = math.hypot(target.centerx - self.position[0], target.centery - self.position[1]) 
+        distance = math.hypot(self.position[0] - target.centerx ,self.position[1] - target.centery) 
+        self.angle = math.degrees(math.atan2(self.position[0] - target.centerx ,self.position[1] - target.centery))
+
         
         if self.alive:
             self.fitness = distance // 10
@@ -231,9 +251,10 @@ class test_subject:
                 self.position[0] += self.velocity[0] // 10
                 self.position[1] += self.velocity[1] // 10
 
-                self.acceleration[0] = 0
-                self.acceleration[1] = 0
+                # self.acceleration[0] = 0
+                # self.acceleration[1] = 0
 
+ 
         if self.dna_counter < len(self.dna)-1:
             self.dna_counter += 1
         else:
@@ -244,8 +265,19 @@ class test_subject:
         renders the test subject onto the screen
 
         """
-        self.subject = pygame.draw.circle(surface, 'blue', (self.position[0],self.position[1]),10)
+        
+        #self.rocket_rotate = pygame.transform.rotate(self.rocket_img, self.angle)
+        self.rocket_img.set_colorkey((0,0,0))
 
+        self.rocket_rect = surface.blit(self.rocket_img, (self.position[0],self.position[1]))
+        if self.target_reached != True:
+            if self.alive != False:
+                self.render_particles(length=5)
+
+def draw_text(surface,position=(0,0),font=None,font_size=15,font_color=(255,255,255),text='hello world!'):
+    font = pygame.font.Font(font,font_size)
+    message = font.render(text,False,font_color)
+    surface.blit(message,position)
 
 def main():
     """
@@ -259,27 +291,39 @@ def main():
     last_time = time.time()
     
     generation_life_span = 0
-    target = pygame.Rect(225, 10, 50,50)
+    generation = 0
 
     evolution_manager = evolution()
+
+    moon_img = pygame.image.load('./moon_ast2.png').convert()
+    moon_img = pygame.transform.scale(moon_img,(40,40))
+    moon_rect = moon_img.get_rect(center=(255,50))
+
     while 1:
         delta_time = time.time() - last_time
         delta_time *= 60
         last_time = time.time()
 
-        SCREEN.fill((0,0,0))
 
-        pygame.draw.rect(SCREEN, 'green', target, 1,100)
+        SCREEN.fill((0,0,0))
+        ALPHA_SURFACE.fill((0,0,0))
+        ALPHA_SURFACE.set_colorkey((0,0,0))
+
+        SCREEN.blit(moon_img,moon_rect)
 
         if generation_life_span == 0:
+            generation += 1
             evolution_manager.evaluate_fitness()
             evolution_manager.generate_population()
         
         generation_life_span += 1
-        if generation_life_span >= 400:
+        if generation_life_span >= 450:
             generation_life_span = 0
 
-        evolution_manager.run_population(target)
+        evolution_manager.run_population(moon_rect)
+        SCREEN.blit(ALPHA_SURFACE,(0,0),special_flags=BLEND_RGBA_ADD)
+        draw_text(SCREEN,position=(35,250),font='./Minecraft.ttf',font_size=30,text=f'CURRENT GENERATION: {generation}')
+        draw_text(SCREEN,position=(5,10),font='./Minecraft.ttf',font_size=15,font_color=(0,255,0),text=f"FPS: {'{:.2f}'.format(FPS.get_fps())}")
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
